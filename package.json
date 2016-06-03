@@ -15,7 +15,7 @@
     "underscore.string": "*",
     "jsonic": "*",
     "commander": "*",
-    "yamljs": "*",
+    "js-yaml": "*",
     "chance": "*",
     "homedir": "*",
     "request": "*"

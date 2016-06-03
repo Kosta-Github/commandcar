@@ -1,9 +1,9 @@
 #!/usr/bin/env node
- 
+
 /**
  * Module dependencies.
  */
- 
+
 
 /*
  * TBD TBD TBD
@@ -21,10 +21,9 @@ var request = require('request');
 var fs = require('fs');
 var jsonic = require('jsonic');
 var os = require('os');
-var npm = require('npm');
 var url = require('url');
 var Path = require('path');
-var yaml = require('yamljs');
+var yaml = require('js-yaml');
 var Chance = require('chance');
 var chance = new Chance();
 var homedir = require('homedir');
@@ -74,11 +73,14 @@ _.each(database,function(apiContent,api){
 		});
 		var rejoinedParts = includedParts.join('_').replace('-','_');
 		_.each(pathContent,function(verbContent,verb){
+            // skip all vendor extensions (starting with "x-")
+            if(verb.substring(0, 2).toLowerCase() === 'x-') { return; }
+
 			commandName = api + '.' + verb + '_' +  rejoinedParts;
 			var shorts = [];
 //			console.log('found command: ' + commandName);
 			var theCommand = program.command(commandName);
-			
+
 			// always start with the api key in order to keep its short name persistent over all the api methods
 			if('security' in verbContent){
 				var securityParameterNames = [];
@@ -86,14 +88,15 @@ _.each(database,function(apiContent,api){
 //				console.log('sec def: ' + securityDefinition);
 				_.each(verbContent.security,function(securityDefinitionContent){
 					_.each(_.keys(securityDefinitionContent),function(securityDefinition){
-						if(apiContent.securityDefinitions[securityDefinition].type == 'apiKey'){
-							securityParameterNames.push(apiContent.securityDefinitions[securityDefinition].name);
-						}else if(apiContent.securityDefinitions[securityDefinition].type == 'oauth2'){
+                        var secDef = apiContent.securityDefinitions[securityDefinition];
+						if(secDef.type == 'apiKey'){
+							securityParameterNames.push(secDef.name);
+						}else if(secDef.type == 'oauth2'){
 							securityParameterNames.push('access_token');
-						}else if(apiContent.securityDefinitions[securityDefinition].type == 'basic'){
+						}else if(secDef.type == 'basic'){
 							securityParameterNames.push('username');
 							securityParameterNames.push('password');
-						}	
+						}
 					});
 				})
 				if(securityParameterNames.length > 0){
@@ -103,7 +106,7 @@ _.each(database,function(apiContent,api){
 						theCommand.option('-' + short + ', --' + securityParameterName + ' <' + securityParameterName + '>',securityParameterName);
 					});
 				}
-				
+
 //				var apiKey = _.find(verbContent.security,function(item){
 //					return 'api_key' in item;
 //				})
@@ -113,25 +116,25 @@ _.each(database,function(apiContent,api){
 //					theCommand.option('-' + short + ', --' + apiContent.securityDefinitions.api_key.name + ' <' + apiContent.securityDefinitions.api_key.name + '>',apiContent.securityDefinitions.api_key.name);
 //				}
 			}
-			
+
 			// also always add a "-r --ret" option
 			theCommand.option('-r, --ret [return value]','specify return value');
 			shorts.push('r');
-			
-			_.each(verbContent.parameters,function(parameter){
+
+            _.each(verbContent.parameters,function(parameter){
 				var short = getShort(parameter.name,shorts);
 				shorts.push(short);
-				
+
 				var leftTag = ' [';
 				var rightTag = ']';
 				if(parameter.required){
 					leftTag = ' <';
 					rightTag = '>';
 				}
-				
+
 				theCommand.option('-' + short + ', --' + parameter.name + leftTag + parameter.name + rightTag,parameter.description);
 			});
-			
+
 			theCommand.action(function(options,o1,o2){
 				performRequest(api,path,verb,options,function(err,ret){
 					if(err){
@@ -141,10 +144,10 @@ _.each(database,function(apiContent,api){
 					}
 				});
 			})
-			
+
 		})
 	});
-	
+
 	// add use and unuse commands if applicable
 	if('securityDefinitions' in apiContent){
 		var securityParameterNames = [];
@@ -173,9 +176,9 @@ _.each(database,function(apiContent,api){
 				unuse(api,options);
 			})
 		}
-		
+
 	}
-	
+
 //	if(('securityDefinitions' in apiContent) && ('api_key' in apiContent.securityDefinitions)){
 //		var useCommand = program.command(api + '.use');
 //		var short = getShort(apiContent.securityDefinitions.api_key.name,[]);
@@ -188,8 +191,8 @@ _.each(database,function(apiContent,api){
 //			unuse(api,options);
 //		})
 //	}
-	
-	
+
+
 })
 
 program
@@ -210,15 +213,16 @@ program
 	.action(function(options){
 //		console.log('loading ' + options.name);
 		var apiName = options.name;
-		
+
 		if(options.file){
 			if(Path.extname(options.file) == '.json'){
 				database[apiName] = JSON.parse(fs.readFileSync(options.file, 'utf8'));
 //				fs.writeFileSync(Path.join(os.tmpdir(),'commandcar-cache.json'),JSON.stringify(database));
 				saveDatabase();
 				console.log('installed %s',apiName);
-			}else if(Path.extname(options.file) == '.yaml'){				
-				database[apiName] = yaml.load(options.file);
+			}else if(Path.extname(options.file) == '.yaml'){
+                var fileContent = fs.readFileSync(options.file);
+				database[apiName] = yaml.load(fileContent);
 //				fs.writeFileSync(Path.join(os.tmpdir(),'commandcar-cache.json'),JSON.stringify(database));
 				saveDatabase();
 				console.log('installed %s',apiName);
@@ -244,16 +248,16 @@ program
 					}catch(e){
 						database[apiName] = yaml.parse(body);
 					}
-					
+
 //					fs.writeFileSync(Path.join(os.tmpdir(),'commandcar-cache.json'),JSON.stringify(database));
 					saveDatabase();
 					console.log('installed %s',apiName);
 				}
 			})
 		}
-		
-		
-		
+
+
+
 	});
 
 
@@ -262,9 +266,9 @@ program.parse(process.argv);
 
 function use(api,options){
 	try{
-		
+
 		var useOptions = {};
-		
+
 		if('securityDefinitions' in database[api]){
 			var securityParameterNames = [];
 //			var securityDefinition = _.keys(database[api].securityDefinitions)[0];
@@ -285,9 +289,9 @@ function use(api,options){
 				fs.writeFileSync(Path.join(USE_DIR,api + '.json'),JSON.stringify(useOptions));
 				console.log('Use successful');
 			}
-			
+
 		}
-		
+
 //		if(('securityDefinitions' in database[api]) && ('api_key' in database[api].securityDefinitions)){
 ////			console.log('options name: ' + database[api].securityDefinitions.api_key.name);
 ////			console.log('value: ' + )
@@ -295,7 +299,7 @@ function use(api,options){
 //		}
 //		fs.writeFileSync(Path.join(USE_DIR,api + '.json'),JSON.stringify(useOptions));
 //		console.log('Use successful. any call on %s will now include --%s %s',api,database[api].securityDefinitions.api_key.name,options[normalizeParameterName(database[api].securityDefinitions.api_key.name)]);
-		
+
 	}catch(e){
 		console.log('error in use command: %s',e);
 	}
@@ -315,7 +319,7 @@ function performRequest(api,path,verb,options,callback){
 	// is the host known? or is passed as -h --host?
 	// facebook host is known: graph.facebook.com
 	// gradle host is always param: 192.8.9.10
-	
+
 	// some api take authorization bearer as headers
 	// some allow auth to pass as params
 	// some require basic auth
@@ -325,7 +329,7 @@ function performRequest(api,path,verb,options,callback){
 	var form = {};
 	var body;
 	var basicAuth;
-	
+
 	// load use options
 	try{
 		useOptions = jsonic(fs.readFileSync(Path.join(USE_DIR,api + '.json'), 'utf8'));
@@ -336,7 +340,7 @@ function performRequest(api,path,verb,options,callback){
 	}catch(e){
 		//console.log('error loading use options: %s',e);
 	}
-	
+
 	var protocol = database[api].schemes[0];
 	var host = database[api].host;
 
@@ -357,7 +361,7 @@ function performRequest(api,path,verb,options,callback){
 	});
 	pathStr = newParts.join('/');
 //	console.log('pathStr: ' + pathStr);
-	
+
 //	console.log(util.inspect(options));
 	var query = {};
 //	console.log('options: ' + util.inspect(options));
@@ -365,7 +369,7 @@ function performRequest(api,path,verb,options,callback){
 //		console.log('parameter name: ' + parameter.name);
 //		console.log('parameter name cameled: ' + normalizeParameterName(parameter.name));
 //		console.log('parameter value: ' + options[normalizeParameterName(parameter.name)]);
-		
+
 		if(parameter['in'] == 'query'){
 			query[parameter.name] = options[normalizeParameterName(parameter.name)];
 		}else if(parameter['in'] == 'header'){
@@ -375,12 +379,12 @@ function performRequest(api,path,verb,options,callback){
 		}else if(parameter['in'] == 'body'){
 			body = options[normalizeParameterName(parameter.name)];
 		}
-	}); 
-	
+	});
+
 	// do we have to add security params to query?
 	if('security' in database[api].paths[path][verb]){
-		
-		
+
+
 		var securityParameterName;
 //		var securityDefinition = _.keys(database[api].paths[path][verb].security[0])[0];
 		// using find because we need only the 1st matched security definition parameters
@@ -412,14 +416,14 @@ function performRequest(api,path,verb,options,callback){
 						return false;
 					}
 				}
-				
+
 			});
-			
+
 			return (found !== 'undefined');
 
 		});
-		
-		
+
+
 //		var apiKey = _.find(database[api].paths[path][verb].security,function(item){
 //			return 'api_key' in item;
 //		})
@@ -428,7 +432,7 @@ function performRequest(api,path,verb,options,callback){
 //			query[database[api].securityDefinitions.api_key.name] = options[normalizeParameterName(database[api].securityDefinitions.api_key.name)]
 //		}
 	}
-	
+
 	var urlObj = {
 		protocol: protocol,
 		host: host,
@@ -438,18 +442,18 @@ function performRequest(api,path,verb,options,callback){
 	if(basicAuth){
 		urlObj['auth'] = basicAuth;
 	}
-	
+
 	theUrl = url.format(urlObj);
 //	console.log('url: ' + theUrl);
-		
-	
-	
+
+
+
 	var requestOptions = {
 		url: theUrl,
 		method: verb.toUpperCase(),
 		headers: headers,
 	}
-	
+
 	if(!_.isEmpty(form)){
 		requestOptions['form'] = form;
 	}
@@ -459,16 +463,16 @@ function performRequest(api,path,verb,options,callback){
 	if(body){
 		requestOptions['body'] = body;
 	}
-	
+
 //	console.log('requestOptions: ' + util.inspect(requestOptions));
-	
+
 	/*
 	 * TBD TBD TBD
 	 * think of how to implement the ret
 	 * TBD TBD TBD
 	 */
-	
-	
+
+
 	request(requestOptions,function(error,response,body){
 		if(error){
 			callback(error);
@@ -487,7 +491,7 @@ function performRequest(api,path,verb,options,callback){
 			callback(null,ret);
 		}
 	})
-	
+
 }
 
 function loadDatabase(){
@@ -498,10 +502,12 @@ function loadDatabase(){
 		cache = fs.readFileSync(Path.join(HOME_DIR,'database.json'), 'utf-8');
 		cache = jsonic(cache);
 	}catch(e){
-		
+
 	}
 	return cache;
 }
+
+var CHAR_POOL = {pool:'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'};
 
 function getShort(name,shorts){
 	var test = name.charAt(0).toLowerCase();
@@ -512,9 +518,9 @@ function getShort(name,shorts){
 			if(_.contains(shorts,test)){
 				test = name.charAt(name.length -1).toUpperCase();
 				if(_.contains(shorts,test)){
-					test = chance.character({pool:'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'});
+					test = chance.character(CHAR_POOL);
 					while(_.contains(shorts,test)){
-						test = chance.character({pool:'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'});
+						test = chance.character(CHAR_POOL);
 					}
 				}
 			}

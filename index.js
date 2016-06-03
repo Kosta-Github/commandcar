@@ -122,8 +122,10 @@ _.each(database,function(apiContent,api){
 			shorts.push('r');
 
             _.each(verbContent.parameters,function(parameter){
-                // skip refs for now
-                if(parameter['$ref']) { return; }
+                if(parameter['$ref']) {
+                    parameter = resolveRef(apiContent, parameter['$ref']);
+                }
+                if(!parameter || !parameter.name) { return; }
 
 				var short = getShort(parameter.name,shorts);
 				shorts.push(short);
@@ -367,20 +369,18 @@ function performRequest(api,path,verb,options,callback){
 	var query = {};
 //	console.log('options: ' + util.inspect(options));
 	_.each(database[api].paths[path][verb].parameters,function(parameter){
-        var normalizedName = normalizeParameterName(parameter.name);
-
 //		console.log('parameter name: ' + parameter.name);
-//		console.log('parameter name cameled: ' + normalizedName);
-//		console.log('parameter value: ' + options[normalizedName]);
+//		console.log('parameter name cameled: ' + normalizeParameterName(parameter.name));
+//		console.log('parameter value: ' + options[normalizeParameterName(parameter.name)]);
 
 		if(parameter['in'] == 'query'){
-			query[parameter.name] = options[normalizedName];
+			query[parameter.name] = options[normalizeParameterName(parameter.name)];
 		}else if(parameter['in'] == 'header'){
-			headers[parameter.name] = options[normalizedName];
+			headers[parameter.name] = options[normalizeParameterName(parameter.name)];
 		}else if(parameter['in'] == 'formData'){
-			form[parameter.name] = options[normalizedName];
+			form[parameter.name] = options[normalizeParameterName(parameter.name)];
 		}else if(parameter['in'] == 'body'){
-			body = options[normalizedName];
+			body = options[normalizeParameterName(parameter.name)];
 		}
 	});
 
@@ -545,4 +545,14 @@ function normalizeParameterName(name){
 
 function saveDatabase(){
 	fs.writeFileSync(Path.join(HOME_DIR,'database.json'),JSON.stringify(database));
+}
+
+function resolveRef(spec, ref) {
+    var path = ref.split('/');
+    return (
+        (path.length === 3) &&
+        (path[0] === '#') &&
+        spec[path[1]] &&
+        spec[path[1]][path[2]]
+    );
 }

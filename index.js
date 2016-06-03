@@ -122,17 +122,16 @@ _.each(database,function(apiContent,api){
 			shorts.push('r');
 
             _.each(verbContent.parameters,function(parameter){
+                // skip refs for now
+                if(parameter['$ref']) { return; }
+
 				var short = getShort(parameter.name,shorts);
 				shorts.push(short);
 
-				var leftTag = ' [';
-				var rightTag = ']';
-				if(parameter.required){
-					leftTag = ' <';
-					rightTag = '>';
-				}
+				var leftTag  = parameter.required ? '<' : '[';
+				var rightTag = parameter.required ? '>' : ']';
 
-				theCommand.option('-' + short + ', --' + parameter.name + leftTag + parameter.name + rightTag,parameter.description);
+				theCommand.option('-' + short + ', --' + parameter.name + ' ' + leftTag + parameter.name + rightTag,parameter.description);
 			});
 
 			theCommand.action(function(options,o1,o2){
@@ -153,11 +152,12 @@ _.each(database,function(apiContent,api){
 		var securityParameterNames = [];
 //		var securityDefinition = _.keys(apiContent.securityDefinitions)[0];
 		_.each(apiContent.securityDefinitions,function(securityDefinitionContent,securityDefinition){
-			if(apiContent.securityDefinitions[securityDefinition].type == 'apiKey'){
-				securityParameterNames.push(apiContent.securityDefinitions[securityDefinition].name);
-			}else if(apiContent.securityDefinitions[securityDefinition].type == 'oauth2'){
+            var secDef = apiContent.securityDefinitions[securityDefinition];
+			if(secDef.type == 'apiKey'){
+				securityParameterNames.push(secDef.name);
+			}else if(secDef.type == 'oauth2'){
 				securityParameterNames.push('access_token');
-			}else if(apiContent.securityDefinitions[securityDefinition].type == 'basic'){
+			}else if(secDef.type == 'basic'){
 				securityParameterNames.push('username');
 				securityParameterNames.push('password');
 			}
@@ -273,11 +273,12 @@ function use(api,options){
 			var securityParameterNames = [];
 //			var securityDefinition = _.keys(database[api].securityDefinitions)[0];
 			_.each(database[api].securityDefinitions,function(securityDefinitionContent,securityDefinition){
-				if(database[api].securityDefinitions[securityDefinition].type == 'apiKey'){
-					securityParameterNames.push(database[api].securityDefinitions[securityDefinition].name);
-				}else if(database[api].securityDefinitions[securityDefinition].type == 'oauth2'){
+                var secDef = database[api].securityDefinitions[securityDefinition];
+				if(secDef.type == 'apiKey'){
+					securityParameterNames.push(secDef.name);
+				}else if(secDef.type == 'oauth2'){
 					securityParameterNames.push('access_token');
-				}else if(database[api].securityDefinitions[securityDefinition].type == 'basic'){
+				}else if(secDef.type == 'basic'){
 					securityParameterNames.push('username');
 					securityParameterNames.push('password');
 				}
@@ -344,7 +345,7 @@ function performRequest(api,path,verb,options,callback){
 	var protocol = database[api].schemes[0];
 	var host = database[api].host;
 
-	pathStr = database[api].basePath + path
+	pathStr = (database[api].basePath || '') + path
 //	console.log('pathStr: ' + pathStr);
 
 	var pathParts = pathStr.split('/');
@@ -366,18 +367,20 @@ function performRequest(api,path,verb,options,callback){
 	var query = {};
 //	console.log('options: ' + util.inspect(options));
 	_.each(database[api].paths[path][verb].parameters,function(parameter){
+        var normalizedName = normalizeParameterName(parameter.name);
+
 //		console.log('parameter name: ' + parameter.name);
-//		console.log('parameter name cameled: ' + normalizeParameterName(parameter.name));
-//		console.log('parameter value: ' + options[normalizeParameterName(parameter.name)]);
+//		console.log('parameter name cameled: ' + normalizedName);
+//		console.log('parameter value: ' + options[normalizedName]);
 
 		if(parameter['in'] == 'query'){
-			query[parameter.name] = options[normalizeParameterName(parameter.name)];
+			query[parameter.name] = options[normalizedName];
 		}else if(parameter['in'] == 'header'){
-			headers[parameter.name] = options[normalizeParameterName(parameter.name)];
+			headers[parameter.name] = options[normalizedName];
 		}else if(parameter['in'] == 'formData'){
-			form[parameter.name] = options[normalizeParameterName(parameter.name)];
+			form[parameter.name] = options[normalizedName];
 		}else if(parameter['in'] == 'body'){
-			body = options[normalizeParameterName(parameter.name)];
+			body = options[normalizedName];
 		}
 	});
 
@@ -390,25 +393,26 @@ function performRequest(api,path,verb,options,callback){
 		// using find because we need only the 1st matched security definition parameters
 		_.find(database[api].paths[path][verb].security,function(securityDefinitonContent){
 			var found = _.find(_.keys(securityDefinitonContent),function(securityDefinition){
-				if(database[api].securityDefinitions[securityDefinition].type == 'apiKey'){
-					if(options[normalizeParameterName(database[api].securityDefinitions[securityDefinition].name)]){
-						if(database[api].securityDefinitions[securityDefinition]['in'] == 'query'){
-							query[database[api].securityDefinitions[securityDefinition].name] = options[normalizeParameterName(database[api].securityDefinitions[securityDefinition].name)]
-						}else if(database[api].securityDefinitions[securityDefinition]['in'] == 'header'){
-							headers[database[api].securityDefinitions[securityDefinition].name] = options[normalizeParameterName(database[api].securityDefinitions[securityDefinition].name)]
+                var secDef = database[api].securityDefinitions[securityDefinition];
+				if(secDef.type == 'apiKey'){
+					if(options[normalizeParameterName(secDef.name)]){
+						if(secDef['in'] == 'query'){
+							query[secDef.name] = options[normalizeParameterName(secDef.name)]
+						}else if(secDef['in'] == 'header'){
+							headers[secDef.name] = options[normalizeParameterName(secDef.name)]
 						}
 						return true;
 					}else{
 						return false;
 					}
-				}else if(database[api].securityDefinitions[securityDefinition].type == 'oauth2'){
+				}else if(secDef.type == 'oauth2'){
 					if(options['access_token']){
 						headers['Authorization'] = 'Bearer ' + options['access_token'];
 						return true;
 					}else{
 						return false;
 					}
-				}else if(database[api].securityDefinitions[securityDefinition].type == 'basic'){
+				}else if(secDef.type == 'basic'){
 					if(options['username'] && options['password']){
 						basicAuth = options['username'] + ':' + options['password'];
 						return true;

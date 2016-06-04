@@ -19,7 +19,6 @@ var _ = require('underscore');
 var us = require('underscore.string');
 var request = require('request');
 var fs = require('fs');
-var jsonic = require('jsonic');
 var os = require('os');
 var url = require('url');
 var Path = require('path');
@@ -76,7 +75,7 @@ _.each(database,function(apiContent,api){
             // skip all vendor extensions (starting with "x-")
             if(verb.substring(0, 2).toLowerCase() === 'x-') { return; }
 
-			commandName = api + '.' + verb + '_' +  rejoinedParts;
+			commandName = api + '.' + (verbContent.operationId || (verb + '_' +  rejoinedParts));
 			var shorts = [];
 //			console.log('found command: ' + commandName);
 			var theCommand = program.command(commandName);
@@ -335,7 +334,7 @@ function performRequest(api,path,verb,options,callback){
 
 	// load use options
 	try{
-		useOptions = jsonic(fs.readFileSync(Path.join(USE_DIR,api + '.json'), 'utf8'));
+		useOptions = JSON.parse(fs.readFileSync(Path.join(USE_DIR,api + '.json'), 'utf8'));
 		_.each(useOptions,function(value,key){
 			options[key] = value;
 //			console.log('loaded ' + options[key] + ' from cache: ' + value);
@@ -488,7 +487,7 @@ function performRequest(api,path,verb,options,callback){
 			var ret;
 			if('ret' in options){
 				var data = JSON.parse(body);
-				ret = data[options.ret];
+				ret = getProperty(data, options.ret);
 			}else{
 				ret = body;
 			}
@@ -498,17 +497,22 @@ function performRequest(api,path,verb,options,callback){
 
 }
 
+function getProperty(data, prop) {
+	var path = prop.split('.');
+	for(var i = 0; i < path.length && data; ++i) {
+		data = data[path[i]];
+	}
+	return data;
+}
+
 function loadDatabase(){
-	var cache = {};
 	try{
 //		console.log('reading cache from: ' + Path.join(os.tmpdir(),'commandcar-cache.json'));
-//		cache = fs.readFileSync(Path.join(os.tmpdir(),'commandcar-cache.json'), 'utf-8');
-		cache = fs.readFileSync(Path.join(HOME_DIR,'database.json'), 'utf-8');
-		cache = jsonic(cache);
+//		return JSON.parse(fs.readFileSync(Path.join(os.tmpdir(),'commandcar-cache.json'), 'utf-8'));
+		return JSON.parse(fs.readFileSync(Path.join(HOME_DIR,'database.json'), 'utf-8'));
 	}catch(e){
-
+		return { };
 	}
-	return cache;
 }
 
 var CHAR_POOL = {pool:'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'};
@@ -544,7 +548,7 @@ function normalizeParameterName(name){
 }
 
 function saveDatabase(){
-	fs.writeFileSync(Path.join(HOME_DIR,'database.json'),JSON.stringify(database));
+	fs.writeFileSync(Path.join(HOME_DIR,'database.json'),JSON.stringify(database, null, 2));
 }
 
 function resolveRef(spec, ref) {

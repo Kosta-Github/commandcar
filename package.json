@@ -13,7 +13,6 @@
   "dependencies": {
     "underscore": "*",
     "underscore.string": "*",
-    "jsonic": "*",
     "commander": "*",
     "js-yaml": "*",
     "chance": "*",

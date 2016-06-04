@@ -88,13 +88,17 @@ _.each(database,function(apiContent,api){
 				_.each(verbContent.security,function(securityDefinitionContent){
 					_.each(_.keys(securityDefinitionContent),function(securityDefinition){
                         var secDef = apiContent.securityDefinitions[securityDefinition];
-						if(secDef.type == 'apiKey'){
-							securityParameterNames.push(secDef.name);
-						}else if(secDef.type == 'oauth2'){
-							securityParameterNames.push('access_token');
-						}else if(secDef.type == 'basic'){
-							securityParameterNames.push('username');
-							securityParameterNames.push('password');
+						switch(secDef.type) {
+							case 'apiKey':
+								securityParameterNames.push(secDef.name);
+								break;
+							case 'oauth2':
+								securityParameterNames.push('access_token');
+								break;
+							case 'basic':
+								securityParameterNames.push('username');
+								securityParameterNames.push('password');
+								break;
 						}
 					});
 				})
@@ -154,13 +158,17 @@ _.each(database,function(apiContent,api){
 //		var securityDefinition = _.keys(apiContent.securityDefinitions)[0];
 		_.each(apiContent.securityDefinitions,function(securityDefinitionContent,securityDefinition){
             var secDef = apiContent.securityDefinitions[securityDefinition];
-			if(secDef.type == 'apiKey'){
-				securityParameterNames.push(secDef.name);
-			}else if(secDef.type == 'oauth2'){
-				securityParameterNames.push('access_token');
-			}else if(secDef.type == 'basic'){
-				securityParameterNames.push('username');
-				securityParameterNames.push('password');
+			switch(secDef.type) {
+				case 'apiKey':
+					securityParameterNames.push(secDef.name);
+					break;
+				case 'oauth2':
+					securityParameterNames.push('access_token');
+					break;
+				case 'basic':
+					securityParameterNames.push('username');
+					securityParameterNames.push('password');
+					break;
 			}
 		});
 		if(securityParameterNames.length > 0){
@@ -216,19 +224,22 @@ program
 		var apiName = options.name;
 
 		if(options.file){
-			if(Path.extname(options.file) == '.json'){
-				database[apiName] = JSON.parse(fs.readFileSync(options.file, 'utf8'));
-//				fs.writeFileSync(Path.join(os.tmpdir(),'commandcar-cache.json'),JSON.stringify(database));
-				saveDatabase();
-				console.log('installed %s',apiName);
-			}else if(Path.extname(options.file) == '.yaml'){
-                var fileContent = fs.readFileSync(options.file);
-				database[apiName] = yaml.load(fileContent);
-//				fs.writeFileSync(Path.join(os.tmpdir(),'commandcar-cache.json'),JSON.stringify(database));
-				saveDatabase();
-				console.log('installed %s',apiName);
-			}else{
-				console.log('Can\'t install %s because file is neither json nor yaml',options.file);
+			switch(Path.extname(options.file)) {
+				case '.json':
+					database[apiName] = JSON.parse(fs.readFileSync(options.file, 'utf8'));
+//					fs.writeFileSync(Path.join(os.tmpdir(),'commandcar-cache.json'),JSON.stringify(database));
+					saveDatabase();
+					console.log('installed %s',apiName);
+					break;
+				case '.yaml':
+					database[apiName] = yaml.load(fs.readFileSync(options.file));
+//					fs.writeFileSync(Path.join(os.tmpdir(),'commandcar-cache.json'),JSON.stringify(database));
+					saveDatabase();
+					console.log('installed %s',apiName);
+					break;
+				default:
+					console.log('Can\'t install %s because file is neither json nor yaml',options.file);
+					break;
 			}
 		}else{
 			var url;
@@ -257,10 +268,7 @@ program
 			})
 		}
 
-
-
 	});
-
 
 
 program.parse(process.argv);
@@ -275,13 +283,17 @@ function use(api,options){
 //			var securityDefinition = _.keys(database[api].securityDefinitions)[0];
 			_.each(database[api].securityDefinitions,function(securityDefinitionContent,securityDefinition){
                 var secDef = database[api].securityDefinitions[securityDefinition];
-				if(secDef.type == 'apiKey'){
-					securityParameterNames.push(secDef.name);
-				}else if(secDef.type == 'oauth2'){
-					securityParameterNames.push('access_token');
-				}else if(secDef.type == 'basic'){
-					securityParameterNames.push('username');
-					securityParameterNames.push('password');
+				switch(secDef.type) {
+					case 'apiKey':
+						securityParameterNames.push(secDef.name);
+						break;
+					case 'oauth2':
+						securityParameterNames.push('access_token');
+						break;
+					case 'basic':
+						securityParameterNames.push('username');
+						securityParameterNames.push('password');
+						break;
 				}
 			})
 			if(securityParameterNames.length > 0){
@@ -372,14 +384,19 @@ function performRequest(api,path,verb,options,callback){
 //		console.log('parameter name cameled: ' + normalizeParameterName(parameter.name));
 //		console.log('parameter value: ' + options[normalizeParameterName(parameter.name)]);
 
-		if(parameter['in'] == 'query'){
-			query[parameter.name] = options[normalizeParameterName(parameter.name)];
-		}else if(parameter['in'] == 'header'){
-			headers[parameter.name] = options[normalizeParameterName(parameter.name)];
-		}else if(parameter['in'] == 'formData'){
-			form[parameter.name] = options[normalizeParameterName(parameter.name)];
-		}else if(parameter['in'] == 'body'){
-			body = options[normalizeParameterName(parameter.name)];
+		switch(parameter['in']) {
+			case 'query':
+				query[parameter.name] = options[normalizeParameterName(parameter.name)];
+				break;
+			case 'header':
+				headers[parameter.name] = options[normalizeParameterName(parameter.name)];
+				break;
+			case 'formData':
+				form[parameter.name] = options[normalizeParameterName(parameter.name)];
+				break;
+			case 'body':
+				body = options[normalizeParameterName(parameter.name)];
+				break;
 		}
 	});
 
@@ -393,37 +410,34 @@ function performRequest(api,path,verb,options,callback){
 		_.find(database[api].paths[path][verb].security,function(securityDefinitonContent){
 			var found = _.find(_.keys(securityDefinitonContent),function(securityDefinition){
                 var secDef = database[api].securityDefinitions[securityDefinition];
-				if(secDef.type == 'apiKey'){
-					if(options[normalizeParameterName(secDef.name)]){
-						if(secDef['in'] == 'query'){
-							query[secDef.name] = options[normalizeParameterName(secDef.name)]
-						}else if(secDef['in'] == 'header'){
-							headers[secDef.name] = options[normalizeParameterName(secDef.name)]
+				switch(secDef.type) {
+					case 'apiKey':
+						var secName = options[normalizeParameterName(secDef.name)];
+						if(secName){
+							switch(secDef['in']) {
+								case 'query':  query[secDef.name]   = secName; break;
+								case 'header': headers[secDef.name] = secName; break;
+							}
+							return true;
 						}
-						return true;
-					}else{
 						return false;
-					}
-				}else if(secDef.type == 'oauth2'){
-					if(options['access_token']){
-						headers['Authorization'] = 'Bearer ' + options['access_token'];
-						return true;
-					}else{
+					case 'oauth2':
+						if(options['access_token']){
+							headers['Authorization'] = 'Bearer ' + options['access_token'];
+							return true;
+						}
 						return false;
-					}
-				}else if(secDef.type == 'basic'){
-					if(options['username'] && options['password']){
-						basicAuth = options['username'] + ':' + options['password'];
-						return true;
-					}else{
+					case 'basic':
+						if(options['username'] && options['password']){
+							basicAuth = options['username'] + ':' + options['password'];
+							return true;
+						}
 						return false;
-					}
 				}
 
 			});
 
 			return (found !== 'undefined');
-
 		});
 
 
